@@ -1,0 +1,438 @@
+STOCKSIGHT AI — VIVA STUDY GUIDE
+================================
+
+Read this before your viva. This guide describes the project as it is currently implemented. Do not claim a feature, dataset, provider, or algorithm that is not listed here. If you do not know an answer, explain what the current version does and what you would improve.
+
+
+1. THE PROJECT IN ONE MINUTE
+----------------------------
+
+StockSight AI is an educational, full-stack stock analysis dashboard. A user can search for a stock, view its historical prices and company information, inspect common technical indicators, read provider-linked news when available, and see an experimental price estimate together with historical evaluation. Users can register and keep a personal watchlist, theme preference, and saved estimates.
+
+The browser interface is built with React and Vite. A Python FastAPI backend fetches market information from Yahoo Finance through yfinance, cleans price data, calculates indicators, runs simple statistical baselines, and handles account APIs. SQLite stores account-related data. The estimates are for learning and demonstration; this is not a trading platform or financial advice.
+
+Short description to say aloud:
+“I made StockSight AI to bring stock history, indicators, company news, and an honestly evaluated baseline estimate into one educational dashboard. It helps a user explore market data and understand what a simple model can and cannot tell them.”
+
+
+2. WHY MAKE IT? WHAT PROBLEM DOES IT ADDRESS?
+---------------------------------------------
+
+Market information is spread across price charts, indicator tools, company pages, and news sources. Beginners may also see forecast numbers without understanding how they were produced or tested. StockSight puts those types of information in one place and labels historical observations separately from model estimates.
+
+The project addresses these learning and usability needs:
+- Explore a selected company's past daily prices over different date ranges.
+- See price, volume, company profile, and provider-sourced news in one dashboard.
+- Learn what familiar indicators such as RSI, MACD, and moving averages measure.
+- Compare a simple trend estimate with a basic previous-close benchmark.
+- See historical, chronological evaluation rather than an unsupported “accuracy” claim.
+- Save a watchlist and personal estimate history in an account.
+
+Who may use it:
+- Students learning financial data analysis, APIs, web development, and introductory time-series evaluation.
+- Beginners who want a single educational view of historical information and indicators.
+- Developers demonstrating a full-stack application with authentication, external data, visualizations, and a small ML/statistics component.
+
+It does not solve investment decision-making, guarantee prediction accuracy, execute trades, manage a portfolio, or provide exchange-wide market screening. The market overview shows three selected indices and a small fixed set of popular symbols, not all market winners/losers.
+
+
+3. MAIN FEATURES
+----------------
+
+1) Stock search: Yahoo Finance search results provide ticker suggestions. A small alias map helps resolve common Indian names/tickers such as TCS to TCS.NS.
+2) Company details: Yahoo Finance company fields may include name, exchange, sector, industry, country, website, employees, and business summary. Missing provider fields are shown as unavailable.
+3) Historical data: Daily adjusted OHLCV observations (Open, High, Low, Close, Volume) can be viewed for supported ranges from one day to maximum history.
+4) Charts: The frontend draws interactive historical close and volume charts and visualizes forecast and evaluation series. It keeps actual history distinct from an estimate.
+5) Technical indicators: SMA, EMA, RSI, MACD, Bollinger bands, daily return, volume, and EMA crossover labels are available.
+6) News: Yahoo Finance supplies headlines. Each shown article has a provider/source name and link to the original item. There is an explicit unavailable state when the provider returns no usable articles.
+7) Market pulse: Shows NIFTY 50, SENSEX, NIFTY BANK and a small selected group of stocks, when available.
+8) Experimental estimate: Compares a previous-close baseline with a 30-session ordinary least-squares linear trend. The requested horizon is limited to 1–30 sessions.
+9) Evaluation: Uses an earlier training section, a trailing validation slice, and a later chronological holdout. It reports actual values, estimates, metrics, and the previous-close benchmark.
+10) Accounts: Register/login, signed bearer sessions, saved watchlist, appearance preference, and saved estimates.
+11) Appearance: Dark/light theme selection.
+
+
+4. TECHNOLOGY STACK AND WHY IT IS USED
+--------------------------------------
+
+Frontend — React 18:
+React builds the user interface from reusable components and state. When selected stock, period, tab, news filter, theme, or account state changes, React redraws the relevant interface.
+
+Vite:
+Vite serves the frontend during development and creates the optimized production bundle. It also passes configured VITE_ environment variables to the frontend.
+
+CSS and SVG:
+CSS styles the responsive dashboard and themes. The charts are drawn in the app using SVG, which scales cleanly in the browser without requiring a charting library.
+
+Lucide React:
+Provides interface icons.
+
+Backend — Python + FastAPI:
+Python is suitable for data processing and scientific packages. FastAPI exposes HTTP endpoints, validates request parameters, returns JSON, and generates OpenAPI docs at /docs.
+
+yfinance / Yahoo Finance:
+The configured external source for search, company information, historical prices, and news. It does not require an API key in this integration, but its availability, coverage, data freshness, and rate limits are outside the application's control.
+
+pandas and NumPy:
+pandas stores and cleans date-indexed price series and computes rolling operations; NumPy provides numerical arrays and calculations.
+
+scikit-learn:
+LinearRegression fits the ordinary least-squares line. Metric functions compute errors during evaluation.
+
+SQLite:
+A small, file-based relational database stores users, sessions, watchlists, preferences, and saved estimates. Python's built-in sqlite3 module means no separate database server is needed for local use.
+
+Why separate frontend and backend?
+The browser handles presentation and user interaction. The backend handles provider requests, data processing, model work, and authorization. This keeps account checks and secret signing material off the client, and the same API could serve another frontend later.
+
+
+5. ARCHITECTURE AND DATA FLOW
+-----------------------------
+
+Market-data request:
+1. The user chooses a symbol or period in the React page.
+2. React sends an HTTP request to FastAPI, using VITE_API_URL (default http://127.0.0.1:8000).
+3. FastAPI validates the symbol/period and resolves known aliases.
+4. The backend calls yfinance/Yahoo Finance, unless a recent price-history result is in its five-minute in-memory cache.
+5. The backend sorts observations by date, removes duplicate dates, drops invalid dates and missing closes, and checks required OHLCV columns.
+6. It calculates indicators or model output as requested and serializes results as JSON.
+7. React displays data or a clear unavailable/error state.
+
+Account request:
+1. The user submits credentials or makes a saved-data request.
+2. FastAPI validates the request and verifies the bearer token for protected endpoints.
+3. SQLite reads or changes only records associated with the authenticated user.
+4. The response returns account data without exposing the password hash.
+
+CORS:
+The backend allows browser origins configured by CORS_ORIGINS. The default allows the local Vite development origins. A deployed app should set the exact trusted frontend origins, not a permissive wildcard for account APIs.
+
+Configuration:
+The ignored project-root .env contains local configuration. VITE_API_URL points the browser to the backend. CORS_ORIGINS sets allowed browser origins. STOCKSIGHT_TOKEN_SECRET signs sessions. STOCKSIGHT_DB_PATH can choose a SQLite location. Never put real secrets in source control.
+
+
+6. HOW THE INDICATORS WORK
+--------------------------
+
+OHLCV:
+Open, High, Low, Close are daily price fields; Volume is provider-reported shares/units traded. The project requests auto-adjusted history, so provider-adjusted prices account for certain corporate actions such as splits/dividends according to Yahoo's adjustment behavior. Explain the exact provider convention if asked; do not claim the app independently reconstructs corporate actions.
+
+Daily return:
+(Today's close / previous close - 1) x 100. It expresses the one-session price change in percent. It is historical and does not predict the next return.
+
+SMA(20):
+Simple moving average over the last 20 daily closes: sum of those closes divided by 20. Each observation has equal weight. It smooths short-term fluctuations, but it lags price changes.
+
+EMA(20) and EMA(50):
+Exponential moving averages recursively weight recent prices more heavily than older prices. The backend uses pandas ewm with adjust=False. EMA20 responds faster than EMA50 because its span is shorter.
+
+EMA crossover:
+The backend compares EMA20 minus EMA50 to its previous value. A move from non-positive to positive is labelled a bullish crossover; a move from non-negative to negative is labelled bearish crossover. These are descriptive labels, not guaranteed signals.
+
+RSI(14):
+Relative Strength Index is based on rolling average positive and negative close changes over 14 sessions. RS = average gain / average loss; RSI = 100 - 100/(1+RS). It is scaled from 0 to 100. The implementation handles edge cases: no losses with gains gives 100, no gains or losses gives 50. Textbook discussions often cite 70/30 levels, but those are conventions and not reliable standalone buy/sell rules.
+
+MACD:
+The MACD line is EMA(12) minus EMA(26). The signal line is a 9-span EMA of the MACD line. Their relationship is a momentum/trend description; it is not a guaranteed forecast.
+
+Bollinger bands:
+The middle band is the 20-session SMA. Upper/lower bands are middle band plus/minus two rolling standard deviations. They visualize recent dispersion/volatility relative to the moving average. A band touch alone does not say what price will do next.
+
+Warm-up values:
+Some rolling indicators need enough prior observations. For example, SMA20 and RSI14 are unavailable at the beginning of a short history. Missing values should be treated as unavailable, not zero.
+
+
+7. FORECAST ALGORITHM — SAY THIS ACCURATELY
+-------------------------------------------
+
+This project does NOT implement an LSTM, neural network, or a trained deep-learning model. “AI” in the project name is broad product branding; technically, the current prediction is a simple statistical baseline using scikit-learn ordinary least-squares linear regression, plus a previous-close baseline.
+
+Candidate A — previous close:
+For a one-step estimate, predict the next close as the most recent close. This is a naive persistence baseline and is surprisingly hard to beat for financial prices because daily prices are noisy and often close to their previous value.
+
+Candidate B — rolling linear trend:
+Take the most recent 30 available closes, assign positions 0 through 29 as the x values, and fit a straight line y = intercept + slope*x by least squares. For a requested horizon h, extrapolate the fitted line to position (29+h). The estimate is clamped at zero so the returned price does not go negative.
+
+Baseline selection:
+With at least 60 data points, select which candidate has lower RMSE on a trailing validation slice within the available history. If there are fewer than 60 points, select the rolling trend because the code does not consider there to be enough data for its selector. This is a simple selection demo; the small validation strategy can be noisy and should not be presented as robust model discovery.
+
+Why this algorithm?
+- It is transparent and easy to explain in a viva.
+- It gives a simple comparison point against the naive previous-close method.
+- It is computationally inexpensive and requires no model training service or GPU.
+- It supports teaching data leakage avoidance and chronological evaluation.
+
+Its weaknesses:
+- Stock prices are noisy and affected by news, earnings, macroeconomic events, and many variables this model does not include.
+- A straight line assumes a local linear trend persists; markets often do not behave that way.
+- It uses only recent closing prices, not fundamentals, news sentiment, volume features, or economic variables.
+- It does not provide calibrated confidence intervals.
+- A horizon estimate is a statistical extrapolation, not a reliable future value.
+
+Never say “the model is 95% accurate” unless a correctly defined result is actually measured and shown. Forecasting has no universal accuracy percentage here.
+
+
+8. MODEL EVALUATION AND METRICS
+-------------------------------
+
+Chronological split:
+The evaluation endpoint requires at least 100 daily closes. It puts the earlier 80% (subject to a minimum split of 60 observations) in training/selection and the later section in the test period. The selected candidate is chosen using a trailing validation slice from the earlier training section. Test estimates are generated walk-forward: for each date, use earlier observations, predict the next close, then allow that actual close to be part of history for the following one-session prediction. The future test observation is not used to make its own estimate.
+
+Why not random train/test split?
+Randomly mixing dates can let later market regimes leak into training for earlier dates and create an unrealistic evaluation. Time-series evaluation should preserve time order.
+
+Previous-close benchmark:
+The model's metrics are displayed next to a previous-close baseline. A more complicated approach is not useful just because it is more complicated; it should be compared with a simple baseline.
+
+MAE (Mean Absolute Error):
+Average of |actual - estimate|. It is in price units and is easy to interpret. Lower is better.
+
+RMSE (Root Mean Squared Error):
+Square root of average squared errors. It is also in price units, but penalizes large errors more than MAE. Lower is better. RMSE is used to select between the two candidate baselines on validation data.
+
+MAPE (Mean Absolute Percentage Error):
+Average absolute error divided by absolute actual value, multiplied by 100. It is percentage-like, but can behave badly near zero. The API omits it if actual values include zero.
+
+R-squared (R²):
+Compares residual error with variation around the actual mean. It can be negative if predictions perform worse than predicting the test-set mean. It is included as context; it can be hard to interpret for trending/volatile price levels.
+
+What evaluation proves:
+It describes performance on a particular historical holdout, period, symbol, provider data, and methodology. It does not prove the model will work in the future. The current project uses one chronological holdout and a validation slice, not an extensive nested cross-validation study.
+
+
+9. NEWS AND EXTERNAL DATA
+-------------------------
+
+News is retrieved from Yahoo Finance via yfinance for a ticker (or the NIFTY 50 index when none is specified). The app displays only returned items with a title and original/canonical URL, and includes the provider/source name and publication date when provided. It never makes up a headline. If the call fails or no usable articles exist, the API returns an unavailable message and empty article list.
+
+The app does not control Yahoo Finance availability, article coverage, freshness, or rate limits. No Yahoo API key is configured or needed for this integration. An empty news panel may mean the provider returned no articles, rather than a frontend bug.
+
+
+10. DATABASE AND ACCOUNT SECURITY
+---------------------------------
+
+SQLite tables:
+- users: unique email, display name, password hash, creation time.
+- sessions: hash of a signed bearer token, user ID, expiration.
+- watchlist: user's normalized ticker symbols.
+- preferences: user's dark/light theme.
+- predictions: saved symbol, horizon, reference and estimated price, model name, time.
+
+Password storage:
+Passwords are not stored in plaintext. A random 16-byte salt is generated for each password. PBKDF2-HMAC-SHA256 with 310,000 rounds derives the stored hash. Verification recomputes it and uses constant-time comparison. A salt prevents identical passwords from having identical stored hashes; PBKDF2 makes guessing more expensive.
+
+Session tokens:
+The backend creates a payload containing user ID, expiry (24 hours), and random nonce, signs it with HMAC-SHA256 using STOCKSIGHT_TOKEN_SECRET, and returns it as a bearer token. The database stores only a SHA-256 hash of the whole token, not the token itself. On protected requests the backend verifies the signature, expiry, and matching active database session. On logout, the stored token hash is deleted, revoking the token.
+
+Authorization:
+Protected endpoints call the backend's current-user dependency and scope user data queries to that user ID. Hiding a frontend button is not security; the backend must enforce ownership.
+
+SQL injection:
+Database queries use SQLite parameter placeholders rather than building SQL from user strings.
+
+Current limitations and production improvements:
+- Browser bearer token is stored in localStorage, which can be exposed by a successful cross-site scripting attack. A hardened production setup should consider secure HttpOnly cookies or an identity provider and strong XSS protections.
+- Add rate limits for login/registration and other expensive endpoints.
+- Add email verification, password reset/recovery, and account deletion flows.
+- Use HTTPS in deployment and a securely managed strong token secret.
+- Add database migrations, backups, and operational monitoring.
+- Review CSP, logging, provider usage terms, privacy, and deployment configuration.
+
+
+11. API ROUTES TO KNOW
+----------------------
+
+GET    /api/health                         service/provider status
+GET    /api/stocks/search?q=...            search ticker suggestions
+GET    /api/market/overview                selected indices/stocks
+GET    /api/market/news?symbol=TCS.NS      provider-linked news
+GET    /api/stock/{symbol}/profile         provider company profile
+GET    /api/stock/{symbol}/history         history and indicators
+GET    /api/stock/{symbol}/forecast        experimental estimate
+GET    /api/stock/{symbol}/evaluation      chronological benchmark report
+POST   /api/auth/register                  create account/session
+POST   /api/auth/login                     sign in
+GET    /api/auth/me                        current user's profile/theme
+POST   /api/auth/logout                    revoke session
+GET/POST /api/user/watchlist               read/add user's symbols
+DELETE /api/user/watchlist/{symbol}        remove user's symbol
+PUT    /api/auth/preferences               update theme
+POST   /api/stock/predictions              calculate/save estimate
+GET    /api/user/predictions               list saved estimates
+
+FastAPI generates interactive documentation at http://127.0.0.1:8000/docs while the backend is running.
+
+
+12. LIMITATIONS AND FUTURE WORK
+-------------------------------
+
+Current project limitations:
+- The market data and news depend on a single external provider, Yahoo Finance through yfinance.
+- Provider data can be delayed, incomplete, unavailable, or rate-limited.
+- The market overview is a small chosen sample, not every listed security.
+- The estimate is deliberately simple; it is not an LSTM or production-grade financial model.
+- Historical evaluation cannot guarantee future results and is limited to a particular holdout setup.
+- No confidence interval is provided because the model has not been calibrated for one.
+- There is no trading, portfolio management, transaction cost calculation, or account recovery/verification.
+- The database schema uses CREATE TABLE IF NOT EXISTS and has no migration system yet.
+- The frontend uses localStorage for some client state and the bearer token.
+
+Reasonable future improvements (if asked what you would do next):
+1. Improve error/empty/loading feedback and test the app against provider failures.
+2. Add unit/integration tests for indicators, input validation, provider edge cases, and account authorization.
+3. Add provider abstraction and caching/rate control to make external data handling more resilient.
+4. Add more rigorous rolling-origin backtesting across multiple time periods and symbols; report uncertainty and compare with naive baselines.
+5. Research additional features/models only after setting up leakage-safe evaluation; do not add a complex model just to call it AI.
+6. Harden public deployment: HTTPS, secure cookie/identity setup, rate limits, email recovery, migrations/backups, monitoring, and privacy review.
+7. Add portfolio tracking or market-wide screening only if those are explicit product goals.
+
+
+13. HYPOTHETICAL VIVA QUESTIONS AND READY ANSWERS
+-------------------------------------------------
+
+Q: Why did you choose this project?
+A: I wanted to combine a useful financial-data interface with full-stack development and a transparent introductory forecasting experiment. The project lets me demonstrate APIs, time-series data processing, visualization, authentication, persistence, and evaluation in one application.
+
+Q: What is the main objective?
+A: To provide one educational dashboard where users can explore stock history, indicators, company details, provider-sourced news, and a clearly labelled experimental estimate with historical benchmark evaluation.
+
+Q: Who benefits from it?
+A: Students and beginners can explore market information and learn how indicators and simple forecast baselines work. It is not intended to replace a professional data terminal or financial adviser.
+
+Q: Why React?
+A: React makes it practical to build reusable interface components and update the dashboard when a user changes stocks, periods, tabs, filters, or account state.
+
+Q: Why FastAPI?
+A: It provides a clear Python API layer, request validation, JSON responses, and automatic OpenAPI documentation. Python also gives access to pandas, NumPy, and scikit-learn for data/model calculations.
+
+Q: What is yfinance?
+A: It is a Python library used here to request Yahoo Finance market history, search results, company details, and news. Yahoo Finance is the external data provider; the app does not own or guarantee that data.
+
+Q: Is this really AI? Which algorithm is used?
+A: The current forecast is a simple statistical baseline, not a neural network. It compares previous close with an ordinary least-squares line fitted to the last 30 closes. I describe it as an experimental baseline because calling it a trained AI model would be inaccurate.
+
+Q: Why use linear regression?
+A: It is transparent, quick, and easy to explain. It estimates a local straight-line trend from recent prices, which is suitable for a learning demonstration. Its simplicity is also a limitation because markets are noisy and often nonlinear.
+
+Q: Why compare with previous close?
+A: Financial prices often have strong short-term persistence, so a naive previous-close prediction is an important baseline. A more complex model should demonstrate improvement over it, not just produce a number.
+
+Q: How do you avoid data leakage?
+A: The evaluation preserves date order. Candidate selection uses an earlier trailing validation slice, and the later holdout is evaluated chronologically. For each one-step test estimate, only prior observations are used; the actual value becomes available only for the next step.
+
+Q: Why not randomly split the data?
+A: A random split could train on observations from dates later than a test date, which would leak future market regimes into the past. Time order must be preserved for a realistic time-series test.
+
+Q: What if the trend model performs worse than previous close?
+A: That is a valid result. The app compares both and may select the lower-RMSE baseline on its validation slice. It is evidence that complexity does not guarantee better predictions.
+
+Q: What does RMSE mean?
+A: It is the square root of the mean squared prediction error. It is in the same price units as the stock and penalizes larger errors more strongly. Lower is better.
+
+Q: What does MAE mean?
+A: It is the average absolute difference between estimated and actual prices, in price units. Lower is better and it is less affected by a few very large errors than RMSE.
+
+Q: What is MAPE, and what is its weakness?
+A: It is average absolute error divided by actual value and expressed as a percentage. It can be undefined or misleading when actual values are zero or close to zero, so the API omits it when actual values contain zero.
+
+Q: What does R² tell us?
+A: It compares prediction residuals with variation around the actual mean. It can be negative when predictions are worse than a mean-value reference. For volatile, trending price levels it can be hard to interpret, so it is only contextual here.
+
+Q: Does a good historical score guarantee future success?
+A: No. It only describes a particular historical holdout. Market conditions change, and past evaluation does not guarantee future performance.
+
+Q: What is RSI?
+A: A 0–100 momentum indicator calculated from average gains and losses over 14 sessions. It summarizes recent upward versus downward movement; it is not a guaranteed buy/sell signal.
+
+Q: Explain SMA versus EMA.
+A: SMA weights each observation in its window equally. EMA gives more weight to recent values, so it reacts faster to a change. Both smooth price history and both lag the market.
+
+Q: What is MACD?
+A: It is the 12-period EMA minus the 26-period EMA, with a 9-period EMA of that result as the signal line. It describes momentum/trend relationships.
+
+Q: What do Bollinger bands show?
+A: A 20-session average with upper and lower bands two rolling standard deviations away. They visualize recent dispersion around the average, not a guaranteed reversal or breakout.
+
+Q: Why SQLite?
+A: It is lightweight, file-based, included with Python, and sufficient for a local educational app without setting up a database server. A larger deployment may need managed database infrastructure and migrations.
+
+Q: How are passwords protected?
+A: The app uses a unique random salt and PBKDF2-HMAC-SHA256 with 310,000 rounds, storing a derived hash instead of plaintext. Verification uses a constant-time comparison.
+
+Q: How are sessions protected and revoked?
+A: A token is signed with HMAC-SHA256, expires after 24 hours, and its hash is stored in SQLite. On requests, the backend checks signature, expiry, and active database session. Logout deletes the stored hash, invalidating the token.
+
+Q: Why hash a token in the database?
+A: If the sessions table is exposed, storing only a hash avoids immediately revealing reusable bearer tokens. The raw token is still held by the browser while signed in, so it must also be protected.
+
+Q: What is CORS?
+A: A browser security policy controlling which origins may call the backend from web pages. This project configures an allowlist through CORS_ORIGINS.
+
+Q: What happens if Yahoo Finance is down?
+A: The API returns a safe error or an explicit unavailable result, and the UI can show that state. It does not fabricate prices or news. A future version could add a second licensed provider or stronger stale-cache strategy.
+
+Q: Why cache price history?
+A: Identical requests can reuse a recent result for five minutes, reducing repeated downloads and provider load. The cache is in memory, so it resets when the backend restarts and is not shared across multiple server processes.
+
+Q: Why is the forecast clamped to zero?
+A: A negative stock price is not meaningful for this interface, so trend extrapolation is bounded below by zero. This does not make the estimate otherwise reliable.
+
+Q: Can users trade through this app?
+A: No. There is no brokerage integration, order placement, portfolio management, or trade execution.
+
+Q: What is the biggest limitation?
+A: The forecast uses only recent closing prices and a simple line. It cannot account for news, company fundamentals, macroeconomic events, and abrupt market changes. It should remain educational and be evaluated against a naive benchmark.
+
+Q: What would you improve first?
+A: I would strengthen automated tests and provider-failure handling, then perform rolling-origin backtests across several tickers and market periods. Before public deployment I would harden authentication, add rate limits and account recovery, and use HTTPS with secure token handling.
+
+Q: How do you know the project works?
+A: The backend includes unit tests for authentication and persistence, indicator edge cases, prediction behavior, chronological evaluation, symbol validation, and provider profile mapping. The frontend can be built for production using npm run build. A full demonstration should also be run locally with both frontend and backend, remembering that live provider calls can fail independently.
+
+Q: What did you personally learn?
+A: The project connects a UI to a REST API, transforms real-world time-series data, computes indicators, visualizes actuals and estimates separately, stores account data, and evaluates a model chronologically. It also taught me not to present a model output as trustworthy without a fair baseline and clear limitations.
+
+
+14. DEMO SCRIPT FOR THE VIVA
+----------------------------
+
+1. Start FastAPI from the backend folder and Vite from the frontend folder.
+2. Open the Vite URL and explain that the browser calls a separate API.
+3. Show the market overview and clarify it is a selected sample.
+4. Search a company/ticker and show the profile and historical chart.
+5. Open Technical Analysis and explain one moving average, RSI, MACD, or Bollinger band.
+6. Open Market News and point out source attribution and original links; explain the provider may return no articles.
+7. Open the estimate page. State that it is previous-close vs. 30-session linear trend, not an LSTM.
+8. Point to historical evaluation and explain the chronological test and previous-close benchmark.
+9. If time allows, register/sign in, add a watchlist item, change theme, save an estimate, and sign out.
+10. Close by stating the intended educational use, major limitation, and a sensible future improvement.
+
+
+15. VOCABULARY QUICK REFERENCE
+------------------------------
+
+API: An interface through which one program requests data/actions from another.
+Endpoint: A specific API URL and method, such as GET /api/stock/TCS.NS/history.
+JSON: A text format used for structured request/response data.
+Ticker/symbol: Short identifier for a listed security, sometimes with an exchange suffix.
+OHLCV: Open, High, Low, Close, Volume.
+Time series: Observations ordered by time.
+Feature/indicator: A calculated summary from past data used for analysis/display.
+Baseline: A simple reference method that a more complex method should be compared against.
+Validation set: Earlier data used for choosing/tuning a method.
+Test/holdout set: Later data kept for estimating out-of-sample historical performance.
+Walk-forward: Predict the next time step using only previous history, then advance through time.
+Overfitting: A method fits quirks of its historical sample and fails to generalize.
+Data leakage: Information from the future/test data accidentally influences training or selection.
+Hash: One-way derived representation used for password verification or token lookup.
+Salt: Random value added before password hashing to make hashes unique.
+Bearer token: A credential where possession allows the associated authorized access.
+CORS: Browser-origin access policy for cross-site API requests.
+
+
+FINAL HONEST SUMMARY
+--------------------
+
+“StockSight AI is a React + FastAPI educational stock-analysis application. Yahoo Finance supplies the market data and news. The backend computes familiar indicators and uses scikit-learn linear regression to extrapolate a recent 30-session trend, comparing it with a previous-close baseline. It evaluates estimates chronologically and stores accounts and personal data in SQLite. It is useful as a learning and exploration tool, but provider coverage and historical results are limited, and estimates are not financial advice.”
+
+END OF GUIDE
